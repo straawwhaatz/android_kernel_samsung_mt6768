@@ -1,0 +1,142 @@
+name: Build freerobuxplzzzzz Kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      selinux_mode:
+        description: 'SELinux mode'
+        required: true
+        default: 'enforcing'
+        type: choice
+        options:
+          - enforcing
+          - permissive
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Setup KernelSU-Next
+        run: |
+          rm -rf KernelSU
+          # Using v1.0.x for kernel 4.14 compatibility.
+          # If v1.0.5 tag doesn't exist, falls back to latest HEAD.
+          # If HEAD also fails to build, check older tags at:
+          # https://github.com/rifsxd/KernelSU-Next/releases
+          git clone --depth=1 \
+            -b v1.0.5 \
+            https://github.com/rifsxd/KernelSU-Next \
+            KernelSU || \
+          git clone --depth=1 \
+            https://github.com/rifsxd/KernelSU-Next \
+            KernelSU
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            bc bison build-essential ccache curl flex \
+            g++-multilib gcc-multilib git gnupg gperf \
+            lib32ncurses5-dev lib32readline-dev lib32z1-dev \
+            liblz4-tool libncurses5 libncurses5-dev libssl-dev \
+            libxml2 libxml2-utils lzop rsync schedtool \
+            squashfs-tools zip zlib1g-dev python3
+
+      - name: Download ZYC Clang 14
+        run: |
+          mkdir -p $HOME/zyc-clang
+          wget -q \
+            https://github.com/ZyCromerZ/Clang/releases/download/14.0.6-20250704-release/Clang-14.0.6-20250704.tar.gz \
+            -O clang.tar.gz
+          tar -xzf clang.tar.gz -C $HOME/zyc-clang
+          rm clang.tar.gz
+          echo "$HOME/zyc-clang/bin" >> $GITHUB_PATH
+
+      - name: Setup build environment
+        run: |
+          TC=$HOME/zyc-clang
+          echo "TC=$TC" >> $GITHUB_ENV
+          echo "CROSS_COMPILE=$TC/bin/aarch64-linux-gnu-" >> $GITHUB_ENV
+          echo "CROSS_COMPILE_ARM32=$TC/bin/arm-linux-gnueabi-" >> $GITHUB_ENV
+          echo "LD=$TC/bin/ld.lld" >> $GITHUB_ENV
+          echo "OBJCOPY=$TC/bin/llvm-objcopy" >> $GITHUB_ENV
+          echo "AS=$TC/bin/llvm-as" >> $GITHUB_ENV
+          echo "NM=$TC/bin/llvm-nm" >> $GITHUB_ENV
+          echo "STRIP=$TC/bin/llvm-strip" >> $GITHUB_ENV
+          echo "OBJDUMP=$TC/bin/llvm-objdump" >> $GITHUB_ENV
+          echo "READELF=$TC/bin/llvm-readelf" >> $GITHUB_ENV
+          echo "CC=$TC/bin/clang" >> $GITHUB_ENV
+          echo "ARCH=arm64" >> $GITHUB_ENV
+          echo "ANDROID_MAJOR_VERSION=r" >> $GITHUB_ENV
+          echo "KCFLAGS=-w -pipe -O3" >> $GITHUB_ENV
+          echo "KCPPFLAGS=-O3" >> $GITHUB_ENV
+          echo "CONFIG_SECTION_MISMATCH_WARN_ONLY=y" >> $GITHUB_ENV
+
+      - name: Make defconfig
+        run: |
+          make -C $(pwd) O=$(pwd)/out a22_slm_defconfig
+
+      - name: Set kernel name
+        run: |
+          ./scripts/config --file out/.config \
+            --set-str CONFIG_LOCALVERSION "-freerobuxplzzzzz"
+
+      - name: Configure SELinux mode
+        run: |
+          MODE="${{ github.event.inputs.selinux_mode }}"
+          echo "Building with SELinux: $MODE"
+          if [ "$MODE" = "permissive" ]; then
+            ./scripts/config --file out/.config \
+              --enable CONFIG_SECURITY_SELINUX_BOOTPARAM \
+              --set-val CONFIG_SECURITY_SELINUX_BOOTPARAM_VALUE 0
+            echo "SELinux set to PERMISSIVE"
+          else
+            ./scripts/config --file out/.config \
+              --enable CONFIG_SECURITY_SELINUX_BOOTPARAM \
+              --set-val CONFIG_SECURITY_SELINUX_BOOTPARAM_VALUE 1
+            echo "SELinux set to ENFORCING"
+          fi
+
+      - name: Finalize config
+        run: |
+          make -C $(pwd) O=$(pwd)/out olddefconfig
+
+      - name: Build kernel
+        run: |
+          make -C $(pwd) O=$(pwd)/out -j$(nproc)
+
+      - name: Check output
+        run: |
+          if [ ! -f out/arch/arm64/boot/Image ]; then
+            echo "Build failed: Image not found"
+            exit 1
+          fi
+          echo "Build successful!"
+          ls -lh out/arch/arm64/boot/
+
+      - name: Package with AnyKernel3
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
+          cp out/arch/arm64/boot/Image AnyKernel3/
+          sed -i 's/do.devicecheck=1/do.devicecheck=0/' AnyKernel3/anykernel.sh
+          MODE="${{ github.event.inputs.selinux_mode }}"
+          ZIP_NAME="freerobuxplzzzzz-a22-${MODE}-$(date +%Y%m%d).zip"
+          cd AnyKernel3
+          zip -r9 "../$ZIP_NAME" . \
+            -x '*.git*' -x 'LICENSE' -x 'README.md'
+          cd ..
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+
+      - name: Upload kernel zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: freerobuxplzzzzz-${{ github.event.inputs.selinux_mode }}
+          path: freerobuxplzzzzz-a22-*.zip
+          retention-days: 7
