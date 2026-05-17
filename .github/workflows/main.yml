@@ -26,17 +26,26 @@ jobs:
       - name: Setup KernelSU-Next
         run: |
           rm -rf KernelSU
-          # Using v1.0.x for kernel 4.14 compatibility.
-          # If v1.0.5 tag doesn't exist, falls back to latest HEAD.
-          # If HEAD also fails to build, check older tags at:
-          # https://github.com/rifsxd/KernelSU-Next/releases
-          git clone --depth=1 \
-            -b v1.0.5 \
-            https://github.com/rifsxd/KernelSU-Next \
-            KernelSU || \
           git clone --depth=1 \
             https://github.com/rifsxd/KernelSU-Next \
             KernelSU
+          echo "=== KernelSU-Next root ==="
+          ls KernelSU/
+          echo "=== KernelSU-Next kernel/ ==="
+          ls KernelSU/kernel/ || echo "no kernel/ folder found"
+
+      - name: Patch missing KSU symbols
+        run: |
+          if ! grep -r "ksu_handle_sys_reboot" KernelSU/kernel/ 2>/dev/null; then
+            echo "ksu_handle_sys_reboot not found, adding stub"
+            cat >> KernelSU/kernel/core_hook.c << 'EOF'
+
+          void ksu_handle_sys_reboot(void) {}
+          EXPORT_SYMBOL(ksu_handle_sys_reboot);
+          EOF
+          else
+            echo "ksu_handle_sys_reboot already defined, no stub needed"
+          fi
 
       - name: Install dependencies
         run: |
@@ -46,7 +55,7 @@ jobs:
             g++-multilib gcc-multilib git gnupg gperf \
             lib32ncurses-dev lib32readline-dev lib32z1-dev \
             liblz4-tool libncurses-dev libssl-dev \
-            libelf-dev libelf1 \
+            libelf-dev libelf1 dwarves \
             libxml2 libxml2-utils lzop rsync schedtool \
             squashfs-tools zip zlib1g-dev python3
 
