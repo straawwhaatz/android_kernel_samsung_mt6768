@@ -134,7 +134,7 @@ jobs:
       - name: Package with AnyKernel3
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
-          cp out/arch/arm64/boot/Image AnyKernel3/
+          cp out/arch/arm64/boot/Image.gz AnyKernel3/
           cat > AnyKernel3/anykernel.sh << 'EOF'
           properties() { '
           kernel.string=freerobuxplzzzzz
