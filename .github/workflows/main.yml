@@ -46,6 +46,7 @@ jobs:
             g++-multilib gcc-multilib git gnupg gperf \
             lib32ncurses-dev lib32readline-dev lib32z1-dev \
             liblz4-tool libncurses-dev libssl-dev \
+            libelf-dev libelf1 \
             libxml2 libxml2-utils lzop rsync schedtool \
             squashfs-tools zip zlib1g-dev python3
 
