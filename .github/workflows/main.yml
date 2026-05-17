@@ -135,7 +135,23 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
           cp out/arch/arm64/boot/Image AnyKernel3/
-          sed -i 's/do.devicecheck=1/do.devicecheck=0/' AnyKernel3/anykernel.sh
+          cat > AnyKernel3/anykernel.sh << 'EOF'
+          properties() { '
+          kernel.string=freerobuxplzzzzz
+          do.devicecheck=0
+          do.modules=0
+          do.systemless=1
+          do.cleanup=1
+          do.cleanuponabort=0
+          '; }
+          block=/dev/block/platform/bootdevice/by-name/boot;
+          is_slot_device=0;
+          ramdisk_compression=auto;
+          patch_vbmeta_flag=auto;
+          . tools/ak3-core.sh;
+          split_boot;
+          flash_boot;
+          EOF
           MODE="${{ github.event.inputs.selinux_mode }}"
           ZIP_NAME="freerobuxplzzzzz-a22-${MODE}-$(date +%Y%m%d).zip"
           cd AnyKernel3
@@ -143,7 +159,6 @@ jobs:
             -x '*.git*' -x 'LICENSE' -x 'README.md'
           cd ..
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
-
       - name: Upload kernel zip
         uses: actions/upload-artifact@v4
         with:
